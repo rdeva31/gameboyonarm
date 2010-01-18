@@ -1,0 +1,1 @@
+Simulates the GameBoy on an ARM machine.  So, like, you don't have to pay Nintendo or anything. You could just use this stuff.
