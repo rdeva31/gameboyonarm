@@ -44,7 +44,9 @@ executeFrame:
 	ldr r7, [r7, r6]				@ Loading opcode handler function address
 
 	push {lr}
-	bl r7							@ Branching to the opcode handler function
+	adr lr, .opReturn				@ Loading link register with the return address
+	bx r7							@ Branching to the opcode handler function
+.opReturn:
 	pop {lr}
 
 	ldr r7, =70221
