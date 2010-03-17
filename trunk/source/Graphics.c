@@ -1,4 +1,5 @@
 #include "Base.h"
+
 #include "Graphics.h"
 
 void gfx_draw(u8 bytes[])
@@ -22,6 +23,5 @@ void gfx_init()
 																					//to read data from, which is bits 18 and 19
 																					
 	//map VRAM A to a specific physical memory
-	*VRAM_A_CONTROL_REG = 0;
 	*VRAM_A_CONTROL_REG = VRAM_A_ENABLE | VRAM_A_OFFSET | VRAM_A_MST;
 }
