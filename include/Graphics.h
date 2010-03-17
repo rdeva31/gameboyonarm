@@ -1,8 +1,6 @@
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 
-#include "Base.h"
-
 /* References to specific registers can be found here: 
 	http://nocash.emubase.de/gbatek.htm#dstechnicaldata
 */
@@ -23,13 +21,13 @@
 														*/
 #define VRAM_A_MST 0	/* Choose memory range 0x6800000 to 0x681FFFF */
 #define VRAM_A_OFFSET (0<<3)	/* since VRAM_MST_0 == 0, no need for offset */
-#define VRAM_A_ENABLE 1 /* Well duh, we want it enabled so it shows stuff */
-#define VRAM_A ((unsigned int *)0x0x06800000) /* Pointer to a segment of memory that is mapped to by VRAM_A_MST and VRAM_A_OFFSET */
+#define VRAM_A_ENABLE (1<<7) /* Well duh, we want it enabled so it shows stuff */
+#define VRAM_A ((unsigned int *)0x06800000) /* Pointer to a segment of memory that is mapped to by VRAM_A_MST and VRAM_A_OFFSET */
 
 
 
 //function prototypes... see Graphics.c for documentation
-void gfx_draw(u8 bytes[]);
+void gfx_draw();
 void gfx_init();
 
 #endif
