@@ -9,5 +9,7 @@ typedef unsigned short u16;
 typedef int s32;
 typedef unsigned int u32;
 
+#define NULL ((unsigned int *)0x0)
+
 #endif
 
