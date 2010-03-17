@@ -13,6 +13,8 @@ int main()
 	printf("Gameboy on ARM Emulator\n");
 
 	executeFrame();
-
+	
+	gfx_init();
+	gfx_draw();
 	return 0;
 }
