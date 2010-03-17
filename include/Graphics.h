@@ -1,6 +1,8 @@
 #ifndef GRAPHICS_H
 #define GRAPHICS_H
 
+#include "Base.h"
+
 /* References to specific registers can be found here: 
 	http://nocash.emubase.de/gbatek.htm#dstechnicaldata
 */
@@ -29,4 +31,5 @@
 //function prototypes... see Graphics.c for documentation
 void gfx_draw(u8 bytes[]);
 void gfx_init();
+
 #endif

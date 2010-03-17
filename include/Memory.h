@@ -1,3 +1,6 @@
+#ifndef MEMORY_H
+#define MEMORY_H
+
 #include "Base.h"
 
 //Reads
@@ -8,3 +11,5 @@ u16 read16(u16 address);
 void write8(u16 address, u8 value);
 void write8Fast(u16 address, u8 value);
 void write16(u16 address, u16 value);
+
+#endif
