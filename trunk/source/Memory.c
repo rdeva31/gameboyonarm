@@ -1,7 +1,6 @@
-#include "Base.h"
-
-#include "Cartridge.h"
-#include "Memory.h"
+#include <Base.h>
+#include <Cartridge.h>
+#include <Memory.h>
 
 u8 RAM[64 * 1024];
 
