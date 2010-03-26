@@ -9,7 +9,9 @@
 // #defines pertaining to controlling the engines
 #define DISPLAY_CONTROL_REG ((unsigned int *)0x4000000)	/* Register DISPCNT, controls the modes of each engine */
 #define BACKGROUND_MODE_2D (1<<16)	/* To be used to set DISPLAY_CONTROL_REG to set screen to normal 2d mode */
-#define BG0_ENABLE (1<<7)	/* This specifies, which background is active
+
+//#defines pertaining to controlling the background
+#define BG0_ENABLE (1<<8)	/* This specifies, which background is active
 								since the gameboy only has one background, we'll just use BG0
 							*/
 #define BG0_CONTROL_REG ((unsigned int *)0x4000008) 	/* Register BG0CNT controls the background */
@@ -38,14 +40,14 @@
 #define BG0_OFFSET_Y_REG ((unsigned short *)0x4000012)	/* A register that controls the y coordinate of background 0*/
 
 // #defines specifying the location of the tile map and the tile data on the NDS
-#define TILE_MAP ((unsigned int *)(0x6000000+0x800*BG0_SCREEN_BASE_BLOCK))
-#define TILE_DATA ((unsigned int *)(0x6000000+0x4000*BG0_CHAR_BASE_BLOCK))
+#define TILE_MAP ((u16 *)(0x6000000))
+#define TILE_DATA ((u64 *)(0x6000000+0x4000))
 
 // #defines pertaining to the colors in the palette
 #define PALETTE_MAP ((unsigned int *)0x05000000)
-#define COLOR_0 0x7C00
-#define COLOR_1 0x03E0
-#define COLOR_2 0x001F
+#define COLOR_0 0x7FFF
+#define COLOR_1 0x70FF
+#define COLOR_2 0x700F
 #define COLOR_3 0x0000
 
 // #defines pertaining to mapping the VRAM A bank to memory
@@ -56,7 +58,7 @@
 															5-6   Not used
 															7     VRAM Enable (0=Disable, 1=Enable)
 														*/
-#define VRAM_A_MST 0	/* Choose memory range 0x6800000 to 0x681FFFF */
+#define VRAM_A_MST 1	/* Choose memory from 0x6000000 */
 #define VRAM_A_OFFSET (0<<3)	/* since VRAM_MST_0 == 0, no need for offset */
 #define VRAM_A_ENABLE (1<<7) /* Well duh, we want it enabled so it shows stuff */
 #define VRAM_A ((unsigned int *)0x06800000) /* Pointer to a segment of memory that is mapped to by VRAM_A_MST and VRAM_A_OFFSET */
@@ -72,9 +74,10 @@ typedef struct {
 							//in the left upper corner of the screen.
 							//these should correspond to registers of the 
 							//same name in the gameboy
-	u8 * tile_map; //a pointer to an area of VRAM known as Background Tile Map
-	u32 * tile_data_table; //aka tile pattern table; pointer to 0x8000 or 0x8800; see page 23 of gameboy documentation
-	int tile_map_type; //should be 0 if tile_data_table = 0x8000, 1 if pointing to 0x8800
+	u8 * tile_map; //a pointer to an area of VRAM known as Background Tile Map (located at 0x9800 or 0x9C00)
+	int tile_map_type; //should be 0, if tile_map = 0x9800, 1 if pointing at 0x9C00 
+	u16 * tile_data_table; //aka tile pattern table; pointer to 0x8000 or 0x8800; see page 23 of gameboy documentation
+	int tile_data_type; //should be 0 if tile_data_table = 0x8000, 1 if pointing to 0x8800
 	
 	int window_x, window_y; //and x and y coordinates of the window respectively
 	int window_enabled; //1 if window is enabled, 0 otherwise
@@ -88,5 +91,4 @@ typedef struct {
 //function prototypes... see Graphics.c for documentation
 int gfx_draw(gfx_canvas_info *);
 void gfx_init();
-
 #endif
