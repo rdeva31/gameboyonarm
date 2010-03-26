@@ -76,8 +76,10 @@ typedef struct {
 							//same name in the gameboy
 	u8 * tile_map; //a pointer to an area of VRAM known as Background Tile Map (located at 0x9800 or 0x9C00)
 	int tile_map_type; //should be 0, if tile_map = 0x9800, 1 if pointing at 0x9C00 
+	
 	u16 * tile_data_table; //aka tile pattern table; pointer to 0x8000 or 0x8800; see page 23 of gameboy documentation
 	int tile_data_type; //should be 0 if tile_data_table = 0x8000, 1 if pointing to 0x8800
+	int num_tiles; //Number of tiles being used.  0<=num_tiles<=192
 	
 	int window_x, window_y; //and x and y coordinates of the window respectively
 	int window_enabled; //1 if window is enabled, 0 otherwise
