@@ -25,34 +25,8 @@ int gfx_draw(gfx_canvas_info * info)
 	*BG0_OFFSET_Y_REG = info->scroll_y;
 
 
-	/*u8 redTile[64] = 
-	{
-		1,1,1,1,1,1,1,1,
-		1,1,1,1,1,1,1,1,
-		1,1,1,1,1,1,1,1,
-		1,1,1,1,1,1,1,1,
-		1,1,1,1,1,1,1,1,
-		1,1,1,1,1,1,1,1,
-		1,1,1,1,1,1,1,1,
-		1,1,1,1,1,1,1,1
-	};
-	 
-	//create a tile called greenTile
-	u8 greenTile[64] = 
-	{
-		2,2,2,2,2,2,2,2,
-		2,2,2,2,2,2,2,2,
-		2,2,2,2,2,2,2,2,
-		2,2,2,2,2,2,2,2,
-		2,2,2,2,2,2,2,2,
-		2,2,2,2,2,2,2,2,
-		2,2,2,2,2,2,2,2,
-		2,2,2,2,2,2,2,2
-	};
-	 
-	swiCopy(redTile, TILE_DATA, 32);
-	swiCopy(greenTile, ((char *)TILE_DATA) + 64, 32);
-	for(counter = 0; counter < 32 * 32; counter++)
+	
+	/*for(counter = 0; counter < 32 * 32; counter++)
 		TILE_MAP[counter] = counter & 1;
 	return 0;
 	*/
@@ -69,8 +43,7 @@ int gfx_draw(gfx_canvas_info * info)
 		u8 * gb_map_ptr = info->tile_map;
 		nds_map_ptr[counter] = (u16)gb_map_ptr[counter];
 		//FIXME need to sign extend depending on tile_map_type
-		//if (nds_map_ptr[counter] != 0)
-		//printf(" %x:%d \n", &nds_map_ptr[counter], nds_map_ptr[counter]);
+
 	}
 	
 	//copy the tiles.  The dimensions of the tiles are the same in the GB and the NDS
@@ -103,7 +76,7 @@ int gfx_draw(gfx_canvas_info * info)
 	//											00000000 -> $00
 	//TODO optimise this
 	
-	for (counter = 0; counter < 192; ++counter) //each bank of the GB holds 192 tiles, and only
+	for (counter = 0; counter < info->num_tiles; ++counter) //each bank of the GB holds 192 tiles, and only
 												//one bank is active at any time
 	{
 		const int num_lines = 8; //8 lines in a 8x8 tile
@@ -147,6 +120,36 @@ int gfx_draw(gfx_canvas_info * info)
 		
 	}
 	
+	/*
+	//for testing	
+	u8 redTile[64] = 
+	{
+		1,1,1,1,1,1,1,1,
+		1,1,1,1,1,1,1,1,
+		1,1,1,1,1,1,1,1,
+		1,1,1,1,1,1,1,1,
+		1,1,1,1,1,1,1,1,
+		1,1,1,1,1,1,1,1,
+		1,1,1,1,1,1,1,1,
+		1,1,1,1,1,1,1,1
+	};
+	 
+	//create a tile called greenTile
+	u8 greenTile[64] = 
+	{
+		2,2,2,2,2,2,2,2,
+		2,2,2,2,2,2,2,2,
+		2,2,2,2,2,2,2,2,
+		2,2,2,2,2,2,2,2,
+		2,2,2,2,2,2,2,2,
+		2,2,2,2,2,2,2,2,
+		2,2,2,2,2,2,2,2,
+		2,2,2,2,2,2,2,2
+	};
+	 
+	swiCopy(redTile, TILE_DATA, 32);
+	swiCopy(greenTile, ((char *)TILE_DATA) + 64, 32);
+	*/
 	
 	
 	//TODO what the fuck do I do about the window
