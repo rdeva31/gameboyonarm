@@ -11,7 +11,7 @@ __inline__ u8 read8(u16 address)
 
 __inline__ u16 read16(u16 address)
 {
-	return (u16)RAM[address] + (((u16)RAM[address + 1]) << 8); //TODO: Care about endianess
+	return (u16)RAM[address] + (((u16)RAM[address + 1]) << 8);
 }
 
 void write8(u16 address, u8 value)
@@ -32,6 +32,6 @@ __inline__ void write8Fast(u16 address, u8 value)
 
 __inline__ void write16(u16 address, u16 value)
 {
-	RAM[address] = (u8)(value && 0xFF); //TODO: Care about endianess
+	RAM[address] = (u8)(value && 0xFF);
 	RAM[address + 1] = (u8)((value >> 8) && 0xFF);
 }
