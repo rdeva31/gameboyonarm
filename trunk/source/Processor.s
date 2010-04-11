@@ -16,22 +16,22 @@
 @-------------------------------------------------------------------------------
 
 .macro SET_A r
-	bic r0, r0, r12, lsl #24
-	orr r0, r0, \r, lsl #24
-.endm
-
-.macro SET_B r
-	bic r0, r0, r12, lsl #16
-	orr r0, r0, \r, lsl #16
-.endm
-
-.macro SET_C r
-	bic r0, r0, r12, lsl #8
+	bic r0, r0, r11, lsl #8
 	orr r0, r0, \r, lsl #8
 .endm
 
+.macro SET_B r
+	bic r0, r0, r11, lsl #24
+	orr r0, r0, \r, lsl #24
+.endm
+
+.macro SET_C r
+	bic r0, r0, r11, lsl #16
+	orr r0, r0, \r, lsl #16
+.endm
+
 .macro SET_F r
-	bic r0, r0, r12
+	bic r0, r0, r11
 	orr r0, r0, \r
 .endm
 
@@ -52,53 +52,75 @@
 .endm
 
 .macro RESET_FLAG_Z
-	and r0, r0, #0x70
+	bic r0, r0, #0x80
 .endm
 
 .macro RESET_FLAG_N
-	and r0, r0, #0xB0
+	bic r0, r0, #0x40
 .endm
 
 .macro RESET_FLAG_H
-	and r0, r0, #0xD0
+	bic r0, r0, #0x20
 .endm
 
 .macro RESET_FLAG_C
-	and r0, r0, #0xE0
+	bic r0, r0, #0x10
+.endm
+
+.macro UPDATE_FLAG_Z
+	orrne r0, r0, #0x80
+	biceq r0, r0, #0x80
+.endm
+
+.macro UPDATE_FLAG_H r, m
+	tst \r, \m
+	orrne r0, r0, #0x20
+	biceq r0, r0, #0x20
+.endm
+
+.macro UPDATE_FLAG_C r, m
+	tst \r, \m
+	orrne r0, r0, #0x10
+	biceq r0, r0, #0x10
 .endm
 
 .macro SET_D r
-	bic r1, r1, r12, lsl #24
+	bic r1, r1, r11, lsl #24
 	orr r1, r1, \r, lsl #24
 .endm
 
 .macro SET_E r
-	bic r1, r1, r12, lsl #16
-	orr r1, r1, \r, lsl #16
-.endm
-
-.macro SET_H r
-	bic r1, r1, r12, lsl #8
-	orr r1, r1, \r, lsl #8
-.endm
-
-.macro SET_L r
-	bic r1, r1, r12
-	orr r1, r1, \r
-.endm
-
-.macro SET_BC r
-	bic r0, r0, r11
-	orr r0, r0, \r
-.endm
-
-.macro SET_DE r
 	bic r1, r1, r11, lsl #16
 	orr r1, r1, \r, lsl #16
 .endm
 
-.macro SET_HL r
+.macro SET_H r
+	bic r1, r1, r11, lsl #8
+	orr r1, r1, \r, lsl #8
+.endm
+
+.macro SET_L r
 	bic r1, r1, r11
+	orr r1, r1, \r
+.endm
+
+.macro SET_AF r
+	bic r0, r0, r12
+	orr r0, r0, \r
+.endm
+
+.macro SET_BC r
+	bic r0, r0, r12, lsl #16
+	orr r0, r0, \r, lsl #16
+.endm
+
+.macro SET_DE r
+	bic r1, r1, r12, lsl #16
+	orr r1, r1, \r, lsl #16
+.endm
+
+.macro SET_HL r
+	bic r1, r1, r12
 	orr r1, r1, \r
 .endm
 
@@ -107,21 +129,21 @@
 .endm
 
 .macro READ_A r
-	mov \r, r0, lsr #24
-.endm
-
-.macro READ_F r
-	mov \r, r0, lsr #16
-	and \r, \r, #0xFF
-.endm
-
-.macro READ_B r
 	mov \r, r0, lsr #8
 	and \r, \r, #0xFF
 .endm
 
-.macro READ_C r
+.macro READ_F r
 	and \r, r0, #0xFF
+.endm
+
+.macro READ_B r
+	mov \r, r0, lsr #24
+.endm
+
+.macro READ_C r
+	mov \r, r0, lsr #16
+	and \r, \r, #0xFF
 .endm
 
 .macro READ_D r
@@ -142,8 +164,12 @@
 	and \r, r1, #0xFF
 .endm
 
+.macro READ_AF r
+	and \r, r0, r12
+.endm
+
 .macro READ_BC r
-	and \r, r0, r11
+	mov \r, r0, lsr #16
 .endm
 
 .macro READ_DE r
@@ -151,7 +177,7 @@
 .endm
 
 .macro READ_HL r
-	and \r, r1, r11
+	and \r, r1, r12
 .endm
 
 .macro READ_SP r
@@ -173,11 +199,12 @@
 	ldrb \r, [r5, \a]
 .endm
 
-.macro READ_16 r, a
+.macro READ_16 r, a, t
 	ldrb \r, [r5, \a]
 	add \a, \a, #1
-	ldrb \a, [r5, \a]
-	eor \r, \r, \a, lsl #8
+	ldrb \t, [r5, \a]
+	sub \a, \a, #1
+	orr \r, \r, \t, lsl #8
 .endm
 
 .macro READ_IMM8 r
@@ -190,29 +217,40 @@
 	add r3, r3, #1
 	ldrb \t, [r5, r3]
 	add r3, r3, #1
-	eor \r, \r, \t, lsl #8
+	orr \r, \r, \t, lsl #8
 .endm
 
 .macro UPDATE_CYCLE_COUNT c
 	add r4, r4, #\c
 .endm
 
+.macro SIGN_EXTEND_8TO9 r
+	tst \r, #0x10000
+	orreq \r, \r, r9, lsl #8
+.endm
+
+.macro SIGN_EXTEND_8TO17 r
+	tst \r, #0x100
+	orreq \r, \r, r11, lsl #8
+	orreq \r, \r, r9, lsl #16
+.endm
+
 @-------------------------------------------------------------------------------
 @ void executeFrame (void)
 @-------------------------------------------------------------------------------
-@ r0  = A,B,C,F State Registers
+@ r0  = B,C,A,F State Registers
 @ r1  = D,E,H,L State Registers
 @ r2  = SP State Register
 @ r3  = PC State Register
 @ r4  = Frame Cycle Count
 @ r5  = RAM Address
-@ r11 = Word mask (0xFFFF)
-@ r12 = Byte mask (0xFF)
+@ r11 = Byte mask (0xFF)
+@ r12 = Word mask (0xFFFF)
 @-------------------------------------------------------------------------------
 executeFrame:
 	.global executeFrame
 
-	push {r4,r5,r6,r7,r8,r11,lr}		@ Saving registers for calling function
+	push {r4,r5,r6,r7,r8,r9,r10,r11,r12,lr}		@ Saving registers for calling function
 
 	ldr r7, =State
 	ldr r0, [r7]					@ Loading A,B,C,F
@@ -223,8 +261,8 @@ executeFrame:
 
 	ldr r5, =RAM					@ Initializing r5 to the RAM address
 
-	ldr r11, =0xFFFF				@ Initializing r11 to 0xFFFF used for word masking
-	mov r12, #0xFF					@ Initializing r12 to 0xFF used for byte masking
+	mov r11, #0xFF					@ Initializing r11 to 0xFF used for byte masking
+	orr r12, r11, r11, lsl #8		@ Initializing r12 to 0xFFFF used for word masking
 
 .next:
 
@@ -252,7 +290,7 @@ executeFrame:
 	str r3, [r7, #12]				@ Saving PC
 	str r6, [r7, #16]				@ Saving leftover cycle count
 
-	pop	{r4,r5,r6,r7,r8,r11,lr}		@ Restoring registers for calling function
+	pop	{r4,r5,r6,r7,r8,r9,r10,r11,r12,lr}		@ Restoring registers for calling function
 
 	bx lr
 
@@ -955,6 +993,10 @@ op47:
 	UPDATE_CYCLE_COUNT 1
 	bx lr
 
+@###############################################################################
+	.ltorg
+@###############################################################################
+
 @-------------------------------------------------------------------------------
 @ LD C, A
 @-------------------------------------------------------------------------------
@@ -1055,7 +1097,7 @@ opEA:
 opF2:
 	
 	READ_C r6
-	add r6, r6, r12, lsl #8
+	add r6, r6, r11, lsl #8
 	READ_8 r7, r6
 	SET_A r7
 	UPDATE_CYCLE_COUNT 2
@@ -1067,7 +1109,7 @@ opF2:
 opE2:
 	
 	READ_C r6
-	add r6, r6, r12, lsl #8
+	add r6, r6, r11, lsl #8
 	READ_A r7
 	WRITE_8 r7, r6
 	UPDATE_CYCLE_COUNT 2
@@ -1131,7 +1173,7 @@ op22:
 opE0:
 	
 	READ_IMM8 r6
-	add r6, r6, r12, lsl #8
+	add r6, r6, r11, lsl #8
 	READ_A r7
 	WRITE_8 r7, r6
 	UPDATE_CYCLE_COUNT 3
@@ -1143,7 +1185,7 @@ opE0:
 opF0:
 	
 	READ_IMM8 r6
-	add r6, r6, r12, lsl #8
+	add r6, r6, r11, lsl #8
 	READ_8 r7, r6
 	SET_A r7
 	UPDATE_CYCLE_COUNT 3
@@ -1206,15 +1248,504 @@ opF8:
 	
 	READ_SP r6
 	READ_IMM8 r7
-	tst r7, #0xF0
-	addeq r6, r6, r7
-	subne r6, r6, r7
+	SIGN_EXTEND_8TO17 r7
 	RESET_FLAG_Z
-	RESET_FLAG_N		@TODO: Take care of C,H flags
-	and r6, r6, r11
+	RESET_FLAG_N
+	and r8, r6, r11				@FLAG_H
+	and r9, r7, r11
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x100
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x10000
+	and r6, r6, r12
 	SET_HL r6
 	UPDATE_CYCLE_COUNT 3
 	bx lr
+
+@-------------------------------------------------------------------------------
+@ LD (XXXX), SP
+@-------------------------------------------------------------------------------
+op08:
+	
+	READ_SP r6
+	READ_IMM16 r7, r8
+	WRITE_16 r6, r7
+	UPDATE_CYCLE_COUNT 5
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ PUSH AF
+@-------------------------------------------------------------------------------
+opF5:
+	
+	READ_AF r6
+	READ_SP r7
+	WRITE_16 r6, r7
+	sub r7, r7, #2
+	SET_SP r7
+	UPDATE_CYCLE_COUNT 4
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ PUSH BC
+@-------------------------------------------------------------------------------
+opC5:
+	
+	READ_BC r6
+	READ_SP r7
+	WRITE_16 r6, r7
+	sub r7, r7, #2
+	SET_SP r7
+	UPDATE_CYCLE_COUNT 4
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ PUSH DE
+@-------------------------------------------------------------------------------
+opD5:
+	
+	READ_DE r6
+	READ_SP r7
+	WRITE_16 r6, r7
+	sub r7, r7, #2
+	SET_SP r7
+	UPDATE_CYCLE_COUNT 4
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ PUSH HL
+@-------------------------------------------------------------------------------
+opE5:
+	
+	READ_HL r6
+	READ_SP r7
+	WRITE_16 r6, r7
+	sub r7, r7, #2
+	SET_SP r7
+	UPDATE_CYCLE_COUNT 4
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ POP AF
+@-------------------------------------------------------------------------------
+opF1:
+	
+	READ_SP r6
+	READ_16 r7, r6, r8
+	SET_AF r7
+	add r6, r6, #2
+	SET_SP r6
+	UPDATE_CYCLE_COUNT 3
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ POP BC
+@-------------------------------------------------------------------------------
+opC1:
+	
+	READ_SP r6
+	READ_16 r7, r6, r8
+	SET_BC r7
+	add r6, r6, #2
+	SET_SP r6
+	UPDATE_CYCLE_COUNT 3
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ POP DE
+@-------------------------------------------------------------------------------
+opD1:
+	
+	READ_SP r6
+	READ_16 r7, r6, r8
+	SET_DE r7
+	add r6, r6, #2
+	SET_SP r6
+	UPDATE_CYCLE_COUNT 3
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ POP HL
+@-------------------------------------------------------------------------------
+opE1:
+	
+	READ_SP r6
+	READ_16 r7, r6, r8
+	SET_HL r7
+	add r6, r6, #2
+	SET_SP r6
+	UPDATE_CYCLE_COUNT 3
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADD A, A
+@-------------------------------------------------------------------------------
+op87:
+	
+	READ_A r6
+	RESET_FLAG_N
+	and r7, r6, #0xF			@FLAG_H
+	and r8, r6, #0xF
+	add r7, r7, r8
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r6
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADD A, B
+@-------------------------------------------------------------------------------
+op80:
+	
+	READ_A r6
+	READ_B r7
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADD A, C
+@-------------------------------------------------------------------------------
+op81:
+	
+	READ_A r6
+	READ_C r7
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADD A, D
+@-------------------------------------------------------------------------------
+op82:
+	
+	READ_A r6
+	READ_D r7
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADD A, E
+@-------------------------------------------------------------------------------
+op83:
+	
+	READ_A r6
+	READ_E r7
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADD A, H
+@-------------------------------------------------------------------------------
+op84:
+	
+	READ_A r6
+	READ_H r7
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADD A, L
+@-------------------------------------------------------------------------------
+op85:
+	
+	READ_A r6
+	READ_L r7
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADD A, (HL)
+@-------------------------------------------------------------------------------
+op86:
+	
+	READ_A r6
+	READ_HL r7
+	READ_8 r7, r7
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 2
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADD A, XX
+@-------------------------------------------------------------------------------
+opC6:
+	
+	READ_A r6
+	READ_IMM8 r7
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADC A, A
+@-------------------------------------------------------------------------------
+op8F:
+	
+	READ_A r6
+	add r7, r6, #1
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r6
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADC A, B
+@-------------------------------------------------------------------------------
+op88:
+	
+	READ_A r6
+	READ_B r7
+	add r7, r7, #1
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADC A, C
+@-------------------------------------------------------------------------------
+op89:
+	
+	READ_A r6
+	READ_C r7
+	add r7, r7, #1
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADC A, D
+@-------------------------------------------------------------------------------
+op8A:
+	
+	READ_A r6
+	READ_D r7
+	add r7, r7, #1
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADC A, E
+@-------------------------------------------------------------------------------
+op8B:
+	
+	READ_A r6
+	READ_E r7
+	add r7, r7, #1
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADC A, H
+@-------------------------------------------------------------------------------
+op8C:
+	
+	READ_A r6
+	READ_H r7
+	add r7, r7, #1
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADC A, L
+@-------------------------------------------------------------------------------
+op8D:
+	
+	READ_A r6
+	READ_L r7
+	add r7, r7, #1
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADC A, (HL)
+@-------------------------------------------------------------------------------
+op8E:
+	
+	READ_A r6
+	READ_HL r7
+	add r7, r7, #1
+	READ_8 r7, r7
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 2
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ ADC A, XX
+@-------------------------------------------------------------------------------
+opCE:
+	
+	READ_A r6
+	READ_IMM8 r7
+	add r7, r7, #1
+	RESET_FLAG_N
+	and r8, r6, #0xF			@FLAG_H
+	and r9, r7, #0xF
+	add r8, r8, r9
+	UPDATE_FLAG_H r8, #0x10
+	add r6, r6, r7
+	UPDATE_FLAG_C r6, #0x100
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
 
 
 
@@ -1239,7 +1770,7 @@ State:
 @-------------------------------------------------------------------------------
 OpcodeJT:
 
-    .word op00, op01, op02, op__, op__, op__, op06, op__, op__, op__, op0A, op__, op__, op__, op0E, op__
+    .word op00, op01, op02, op__, op__, op__, op06, op__, op08, op__, op0A, op__, op__, op__, op0E, op__
     .word op__, op11, op12, op__, op__, op__, op16, op__, op__, op__, op1A, op__, op__, op__, op1E, op__
     .word op__, op21, op22, op__, op__, op__, op26, op__, op__, op__, op2A, op__, op__, op__, op2E, op__
     .word op__, op31, op32, op__, op__, op__, op36, op__, op__, op__, op3A, op__, op__, op__, op3E, op__
@@ -1247,14 +1778,14 @@ OpcodeJT:
     .word op50, op51, op52, op53, op54, op55, op56, op57, op58, op59, op5A, op5B, op5C, op5D, op5E, op5F
     .word op60, op61, op62, op63, op64, op65, op66, op67, op68, op69, op6A, op6B, op6C, op6D, op6E, op6F
     .word op70, op71, op72, op73, op74, op75, op__, op77, op78, op79, op7A, op7B, op7C, op7D, op7E, op7F
+    .word op80, op81, op82, op86, op84, op85, op86, op87, op88, op89, op8A, op8B, op8C, op8D, op8E, op8F
     .word op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__
     .word op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__
     .word op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__
-    .word op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__
-    .word op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__
-    .word op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__
-    .word opE0, op__, opE2, op__, op__, op__, op__, op__, op__, op__, opEA, op__, op__, op__, op__, op__
-    .word opF0, op__, opF2, op__, op__, op__, op__, op__, opF8, opF9, opFA, op__, op__, op__, op__, op__
+    .word op__, opC1, op__, op__, op__, opC5, opC6, op__, op__, op__, op__, op__, op__, op__, opCE, op__
+    .word op__, opD1, op__, op__, op__, opD5, op__, op__, op__, op__, op__, op__, op__, op__, op__, op__
+    .word opE0, opE1, opE2, op__, op__, opE5, op__, op__, op__, op__, opEA, op__, op__, op__, op__, op__
+    .word opF0, opF1, opF2, op__, op__, opF5, op__, op__, opF8, opF9, opFA, op__, op__, op__, op__, op__
 
 @-------------------------------------------------------------------------------
 @ CB Opcode Function Jump Table
