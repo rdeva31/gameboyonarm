@@ -39,7 +39,13 @@
 #define BG0_OFFSET_X_REG ((unsigned short *)0x4000010)	/* A register that controls the x coordinate of background 0*/
 #define BG0_OFFSET_Y_REG ((unsigned short *)0x4000012)	/* A register that controls the y coordinate of background 0*/
 
+
+// #defines specifying window registers
+#define WINDOW0_ENABLE (1<<12)	/* Used to enable WINDOW0 in DISPLAY_CONTROL_REG */
+#define WINDOW0_X ((u16 *)0x4000040)
+#define WINDOW0_Y ((u16 *)0x4000044)
 // #defines specifying the location of the tile map and the tile data on the NDS
+#define NUM_TILES 192
 #define TILE_MAP ((u16 *)(0x6000000))
 #define TILE_DATA ((u64 *)(0x6000000+0x4000))
 
@@ -64,13 +70,18 @@
 #define VRAM_A ((unsigned int *)0x06800000) /* Pointer to a segment of memory that is mapped to by VRAM_A_MST and VRAM_A_OFFSET */
 
 
+//#defines pertaining to sprites
+#define SPRITES_ENABLE (1<<11)	/* Used to enable sprites in DISPLAY_CONTROL_REG */
+#define OAM ((u64 *) 0x07000000) /* Location of the OAM in NDS */
+
+
 /* Gameboy documentation link (pg 21):
 	"Gameboy CPU Manual" //FIXME: add link bitch
 */
 typedef struct {
 	/* data pertaining to the background */
 	int background_enabled; //1 if background is enabled, 0 otherwise
-	int scroll_x, scroll_y; //coordinates of background to be displayed 
+	u8 scroll_x, scroll_y; //coordinates of background to be displayed 
 							//in the left upper corner of the screen.
 							//these should correspond to registers of the 
 							//same name in the gameboy
@@ -79,15 +90,18 @@ typedef struct {
 	
 	u16 * tile_data_table; //aka tile pattern table; pointer to 0x8000 or 0x8800; see page 23 of gameboy documentation
 	int tile_data_type; //should be 0 if tile_data_table = 0x8000, 1 if pointing to 0x8800
-	int num_tiles; //Number of tiles being used.  0<=num_tiles<=192
+	u8 tiles_modified[NUM_TILES/8]; 	//A bitmap denoting if the tile was modified.  the first bit of tiles_modified[0] refers to the
+										//while tiles_modified[192/8] & (1<<7) denotes the last tile.
 	
-	int window_x, window_y; //and x and y coordinates of the window respectively
+	u8 window_x, window_y; //and x and y coordinates of the window respectively
 	int window_enabled; //1 if window is enabled, 0 otherwise
 	
 	/* data pertaining to sprites */
-	void * oam; //pointer to 0xfe00, which is 160 byte block of object attribute memory containing data
+	int sprites_enabled;
+	u32 * oam; //pointer to 0xfe00, which is 160 byte block of object attribute memory containing data
 				//about each sprite (at most 40 sprites are allowed)
 	int sprite_mode; //1 if sprite size is 8x16, 0 if 8x8
+	void * sprite_pattern_table; //pointer to 0x8000
 	
 } gfx_canvas_info;
 //function prototypes... see Graphics.c for documentation

@@ -83,7 +83,7 @@ int main()
 	i.scroll_x = i.scroll_y = 0;
 	i.tile_map = map;
 	i.tile_data_table = tile_data;
-	i.num_tiles = 2;
+	//i.num_tiles = 2;
 	
 	consoleDemoInit();
  
