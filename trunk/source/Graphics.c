@@ -1,6 +1,17 @@
 #include <Base.h>
 #include <Graphics.h>
 
+
+extern u8 * RAM;
+
+static int is_tile_modified(u8 * array, int index) 
+{
+	int offset = index & 7; //same as % 8
+	index = index / 8;
+	
+	return array[index] & (1 << offset);
+}
+
 //static void gfx_memcpy(void *, void *, int);
 /*
 	Draw appropriate image onto the screen. 
@@ -14,7 +25,7 @@ int gfx_draw(gfx_canvas_info * info)
 	if (!info)
 		return -1; //nothing to do
 	
-	if (info->background_enabled) //FIXME: background should become while if bg_enable == 0
+	if (info->background_enabled) //FIXME: background should become white if bg_enable == 0
 		//*VRAM_A_CONTROL_REG |= VRAM_A_ENABLE;
 		*DISPLAY_CONTROL_REG |= BG0_ENABLE;		//not sure which one these is the correct/better way
 	else
@@ -37,13 +48,17 @@ int gfx_draw(gfx_canvas_info * info)
 	
 	//copy the map.  Note that we can't use a straight up memcpy because the indexes in a gameboy map
 	//is 1 byte long..whereas the index are 2 bytes long in the NDS
+	
+	//TODO: it might be better to write to RAM then DMA copy to map memory
 	for (counter = 0; counter < 32*32; ++counter)
 	{
 		u16 * nds_map_ptr = TILE_MAP;
 		u8 * gb_map_ptr = info->tile_map;
-		nds_map_ptr[counter] = (u16)gb_map_ptr[counter];
-		//FIXME need to sign extend depending on tile_map_type
-
+		
+		if (info->tile_map_type) //values are sign extended, so add an offset to normalize them
+			nds_map_ptr[counter] = (u16)((s16)gb_map_ptr[counter] + 128);
+		else //don't bother normalizing
+			nds_map_ptr[counter] = (u16)gb_map_ptr[counter];
 	}
 	
 	//copy the tiles.  The dimensions of the tiles are the same in the GB and the NDS
@@ -74,15 +89,12 @@ int gfx_draw(gfx_canvas_info * info)
 	//											00000000 -> $00
 	//								........ -> 00000000 -> $00
 	//											00000000 -> $00
-	//TODO optimise this
 	
-	for (counter = 0; counter < info->num_tiles; ++counter) //each bank of the GB holds 192 tiles, and only
-												//one bank is active at any time
+	for (counter = 0; counter < NUM_TILES && is_tile_modified(info->tiles_modified, counter); ++counter) 
 	{
 		const int num_lines = 8; //8 lines in a 8x8 tile
-		int temp_counter = 0;
 		u8 * gb_tile = (u8 *)&(info->tile_data_table[counter * 8]);
-		u8 ds_tile[8][8] = {0};
+		u8 ds_tile[8][8] = {{0}};
 		
 		//convert the tile from gameboy format to ds format
 		int row = 0, col = 0;
@@ -151,9 +163,126 @@ int gfx_draw(gfx_canvas_info * info)
 	swiCopy(greenTile, ((char *)TILE_DATA) + 64, 32);
 	*/
 	
+	//deal with the window layer
 	
-	//TODO what the fuck do I do about the window
-	//TODO shit with sprites
+	//enable window?
+	if (info->window_enabled)
+		*DISPLAY_CONTROL_REG |= WINDOW0_ENABLE;
+	else
+		*DISPLAY_CONTROL_REG &= ~WINDOW0_ENABLE;
+	
+	//deal with setting window coordinates
+
+	//layout of WINDOW0_X:
+	// Bit   Expl.
+	// 0-7   X2, Rightmost coordinate of window, plus 1
+  	// 8-15  X1, Leftmost coordinate of window
+
+	*WINDOW0_X = (((u16)info->window_x)<<8) | (160+1); // 160 since it's the length of GB screen
+	*WINDOW0_Y = (((u16)info->window_y - 7)<<8) | (144+1); // 144 since it's the height of GB screen
+	
+	//FIXME:  major bug here.  Based on NDS's set up, the window is mapped to a tile map of its own, but the 
+	//GB specs make no mention of this.  In fact it doesn't even talk about the window that much.  So leaving this part 
+	//mostly unimplemented
+	
+	
+	
+	
+	//deal with sprites
+	if (info->sprites_enabled)
+		*DISPLAY_CONTROL_REG |= SPRITES_ENABLE;
+	else
+		*DISPLAY_CONTROL_REG &= ~SPRITES_ENABLE;
+		
+		
+	//copy contents of OAM
+	int nds_oam_index = 0;
+	for (counter = 0; counter < 40; ++counter) //40 is the number of max sprites in GB
+	{
+		/*
+			Layout of OAM in GB:
+			
+			Byte0 - Y Position
+			Specifies the sprites vertical position on the screen (minus 16).
+			An offscreen value (for example, Y=0 or Y>=160) hides the sprite.
+
+			Byte1 - X Position
+			Specifies the sprites horizontal position on the screen (minus 8).
+			An offscreen value (X=0 or X>=168) hides the sprite, but the sprite
+			still affects the priority ordering - a better way to hide a sprite is to set its Y-coordinate offscreen.
+
+			Byte2 - Tile/Pattern Number
+			Specifies the sprites Tile Number (00-FF). This (unsigned) value selects a tile from memory at 8000h-8FFFh. In CGB Mode this could be either in VRAM Bank 0 or 1, depending on Bit 3 of the following byte.
+			In 8x16 mode, the lower bit of the tile number is ignored. Ie. the upper 8x8 tile is "NN AND FEh", and the lower 8x8 tile is "NN OR 01h".
+
+			Byte3 - Attributes/Flags:
+			  Bit7   OBJ-to-BG Priority (0=OBJ Above BG, 1=OBJ Behind BG color 1-3)
+					 (Used for both BG and Window. BG color 0 is always behind OBJ)
+			  Bit6   Y flip          (0=Normal, 1=Vertically mirrored)
+			  Bit5   X flip          (0=Normal, 1=Horizontally mirrored)
+			  Bit4   Palette number  **Non CGB Mode Only** (0=OBP0, 1=OBP1) => not used in GB
+			  Bit3   Tile VRAM-Bank  **CGB Mode Only**     (0=Bank 0, 1=Bank 1) => not used in GB
+			  Bit2-0 Palette number  **CGB Mode Only**     (OBP0-7) => not used in GB
+		*/
+		u32 attribute = info->oam[counter];
+		u8 x_pos = attribute | 0xff;
+		u8 y_pos = attribute | (0xff<<8);
+		u8 tile_index = attribute | (0xff<<16);
+		u8 priority = attribute | (0x80<<24);
+		u8 y_flip = attribute | (0x40<<24);
+		u8 x_flip = attribute | (0x20<<24);
+		
+		u16 * oam = (u16 *)&(OAM[nds_oam_index]);	//TODO: investigate this later:
+													//1. When using the 256 Colors/1 Palette mode, 
+													//only each second tile may be used, the lower 
+													//bit of the tile number should be zero [##taken care of ##]
+													//(in 2-dimensional 
+													//mapping mode, the bit is completely ignored).
+		u16 * obj_attribute_0 = &oam[0];
+		u16 * obj_attribute_1 = &oam[1];
+		u16 * obj_attribute_2 = &oam[2];
+		
+		//begin setting obj_attribute_0
+		*obj_attribute_0 = (u16)y_pos;
+		*obj_attribute_0 &= ~(1<<8);	//turns off scaling and rotation
+		*obj_attribute_0 &= ~(1<<9);	//displays the sprite.  Note that GB doesn't have this flag
+										//in it's OAM.  To hide a sprite, need to set the x and y
+										//values to something obscenely large so it's "displayed"
+										//off the screen
+		*obj_attribute_0 &= ~(3<<10);	//sets the OBJ mode to normal, as opposed to transparent or some other crap
+		*obj_attribute_0 &= ~(1<<12);	//turns of mosaic mode
+		*obj_attribute_0 |= (1<<13);	//sets the color/pallete to 256/1
+		if (info->sprite_mode)	//8x16 sprite mode
+			*obj_attribute_0 |= (2<<14);	//sets the sprite to vertical mode which supports 8x16 tiles
+		else	//8x8 sprite mode
+			*obj_attribute_0 &= ~(3<<14);	//sets the spirte to square mode which supports 8x8 tiles
+			
+		
+		//begin setting obj_attribute_1
+		*obj_attribute_1 = (u16)x_pos;
+
+		if (x_flip)	//if need to horizontal flip //TODO check if this should be vertical or horizontal
+			*obj_attribute_1 |= (1<<12);
+		else
+			*obj_attribute_1 &= ~(1<<12);
+			
+		if (y_flip)	//if need to vertical flip
+			*obj_attribute_1 |= (1<<13);
+		else
+			*obj_attribute_1 &= ~(1<<13);
+
+		*obj_attribute_1 &= ~(3<<14);	//sets the sprite to 8x8 mode or 8x16 mode depending on corresponding
+										//flags in obj_attribute_0			
+		
+		
+		//begin setting obj_attribute_2
+		*obj_attribute_2 = info->sprite_mode ? tile_index & ~1 : tile_index; //in 8x16 mode the lower bit must be 0
+		if (priority)	//set the priority low if priority variable is high
+			*obj_attribute_2 |= (3<<10);	//3 is low priority
+		else
+			*obj_attribute_2 &= ~(3<<10);	//0 is high priority
+			
+	}
 	
 	
 	return 0;
@@ -190,3 +319,37 @@ void gfx_init()
 }
 
 
+/*
+	Setups up info such that it can be used in calling gfx_draw()
+	Only some fields are setup.  The following fields are not setup properly:
+		- num_tiles [if in doubt, initialize this to 192]
+	Returns a value < 0 on error
+*/
+int gfx_setup(gfx_canvas_info * info)
+{
+	if (!info)
+		return -1;
+	
+	info->background_enabled = 1; //TODO find out what part of memory to read to find this
+	info->scroll_x = RAM[0xff42];
+	info->scroll_y = RAM[0xff43];
+	
+	u8 lcdc = RAM[0xff40];
+	info->tile_map_type = (lcdc & 8) ? 1 : 0;
+	info->tile_map = (info->tile_map_type) ? &RAM[0x9c00] : &RAM[0x9800];
+	info->tile_data_type = (lcdc & 16) ? 0 : 1;
+	info->tile_data_table = (u16 *)((info->tile_data_type) ? &RAM[0x8800] : &RAM[0x8000]);
+
+	
+	info->window_x = RAM[0xff4b];
+	info->window_y = RAM[0xff4a];
+	info->window_enabled = (lcdc & 0x10) ? 1 : 0;
+	
+	
+	info->sprites_enabled = (lcdc & 0x20) ? 1 : 0;
+	info->oam = (u32 *)&RAM[0xfe00];
+	info->sprite_mode = (lcdc & 4) ? 1 : 0;
+	info->sprite_pattern_table = &RAM[0x8000];
+	
+	return 0;
+}
