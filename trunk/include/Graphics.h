@@ -71,9 +71,9 @@
 
 
 //#defines pertaining to sprites
-#define SPRITES_ENABLE (1<<11)	/* Used to enable sprites in DISPLAY_CONTROL_REG */
+#define SPRITES_ENABLE (1<<12)	/* Used to enable sprites in DISPLAY_CONTROL_REG */
 #define OAM ((u64 *) 0x07000000) /* Location of the OAM in NDS */
-
+#define NUM_SPRITES 40
 
 /* Gameboy documentation link (pg 21):
 	"Gameboy CPU Manual" //FIXME: add link bitch
@@ -101,7 +101,8 @@ typedef struct {
 	u32 * oam; //pointer to 0xfe00, which is 160 byte block of object attribute memory containing data
 				//about each sprite (at most 40 sprites are allowed)
 	int sprite_mode; //1 if sprite size is 8x16, 0 if 8x8
-	void * sprite_pattern_table; //pointer to 0x8000
+	u8 sprites_modified[NUM_SPRITES/8];	//same format as tile_modified
+	u16 * sprite_pattern_table; //pointer to 0x8000
 	
 } gfx_canvas_info;
 //function prototypes... see Graphics.c for documentation
