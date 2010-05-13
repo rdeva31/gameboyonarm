@@ -1,10 +1,10 @@
 #include <Base.h>
 #include <Graphics.h>
-
+#include "nds.h"
 
 extern u8 * RAM;
 
-static int is_tile_modified(u8 * array, int index) 
+static int is_set(u8 * array, int index) 
 {
 	int offset = index & 7; //same as % 8
 	index = index / 8;
@@ -12,6 +12,43 @@ static int is_tile_modified(u8 * array, int index)
 	return array[index] & (1 << offset);
 }
 
+
+static int convert_tile_gb_to_nds(u8 * gb_tile, u8 ds_tile[8][8])
+{
+	const int num_lines = 8; //8 lines in a 8x8 tile
+	int row = 0, col = 0;
+	
+	
+	for (row = 0; row < num_lines;++row)
+	{
+		u16 curr_line = ((u16 *)gb_tile)[row];
+		
+		for (col = 0; col < num_lines; ++col)
+		{
+			u16 mask = 0x101;
+			switch ((curr_line >> (8 - col - 1)) & mask)
+			{
+				case 0x101:
+					ds_tile[row][col] = 3; //COLOR_3
+					break;
+				case 0x001:
+					ds_tile[row][col] = 2; //COLOR_2
+					break;
+				case 0x100:
+					ds_tile[row][col] = 1; //COLOR_1
+					break;
+				case 0x000:
+					ds_tile[row][col] = 0; //COLOR_0
+					break;
+				default:
+					return -2;
+			}
+			
+		}
+	}
+	
+	return 0;
+}
 //static void gfx_memcpy(void *, void *, int);
 /*
 	Draw appropriate image onto the screen. 
@@ -21,7 +58,7 @@ static int is_tile_modified(u8 * array, int index)
 */
 int gfx_draw(gfx_canvas_info * info)
 {
-	int counter;
+	long counter;
 	if (!info)
 		return -1; //nothing to do
 	
@@ -90,45 +127,16 @@ int gfx_draw(gfx_canvas_info * info)
 	//								........ -> 00000000 -> $00
 	//											00000000 -> $00
 	
-	for (counter = 0; counter < NUM_TILES && is_tile_modified(info->tiles_modified, counter); ++counter) 
+	for (counter = 0; counter < NUM_TILES && is_set(info->tiles_modified, counter); ++counter) 
 	{
-		const int num_lines = 8; //8 lines in a 8x8 tile
 		u8 * gb_tile = (u8 *)&(info->tile_data_table[counter * 8]);
 		u8 ds_tile[8][8] = {{0}};
-		
 		//convert the tile from gameboy format to ds format
-		int row = 0, col = 0;
-		for (row = 0; row < num_lines;++row)
-		{
-			u16 curr_line = ((u16 *)gb_tile)[row];
-			
-			for (col = 0; col < num_lines; ++col)
-			{
-				u16 mask = 0x101;
-				switch ((curr_line >> (8 - col - 1)) & mask)
-				{
-					case 0x101:
-						ds_tile[row][col] = 3; //COLOR_3
-						break;
-					case 0x001:
-						ds_tile[row][col] = 2; //COLOR_2
-						break;
-					case 0x100:
-						ds_tile[row][col] = 1; //COLOR_1
-						break;
-					case 0x000:
-						ds_tile[row][col] = 0; //COLOR_0
-						break;
-					default:
-						return -2;
-				}
-				
-			}
-			
-		}
+		convert_tile_gb_to_nds(gb_tile, (u8 *)ds_tile);
 		
 		//now the tile is in ds_tile, write that into memory
-		swiCopy(ds_tile, &(TILE_DATA[counter]), 64);
+		DC_FlushRange(ds_tile, 64);
+		dmaCopy(ds_tile, &(TILE_DATA[counter]), 64);
 		
 	}
 	
@@ -189,15 +197,45 @@ int gfx_draw(gfx_canvas_info * info)
 	
 	
 	//deal with sprites
-	if (info->sprites_enabled)
-		*DISPLAY_CONTROL_REG |= SPRITES_ENABLE;
+/*	if (info->sprites_enabled)*/
+/*		*DISPLAY_CONTROL_REG |= SPRITES_ENABLE;*/
+/*	else*/
+/*		*DISPLAY_CONTROL_REG &= ~SPRITES_ENABLE;*/
+	
+	vramSetBankB(VRAM_A_MAIN_SPRITE);
+	oamInit(&oamMain, SpriteMapping_1D_32, false);
+	
+	u8 * gfx;
+	if (info->sprite_mode)
+		gfx = oamAllocateGfx(&oamMain, SpriteSize_8x16, SpriteColorFormat_256Color);
 	else
-		*DISPLAY_CONTROL_REG &= ~SPRITES_ENABLE;
+		gfx = oamAllocateGfx(&oamMain, SpriteSize_8x8, SpriteColorFormat_256Color);
+
+	//setup the pallete
+	SPRITE_PALETTE[0] = COLOR_0;
+	SPRITE_PALETTE[1] = COLOR_1;
+	SPRITE_PALETTE[2] = COLOR_2;
+	SPRITE_PALETTE[3] = COLOR_3;
+	
+	//copy the character maps
+	for (counter = 0; counter < NUM_TILES; ++counter) 
+	{
+		u8 * gb_tile = (u8 *)&(info->sprite_pattern_table[counter * 8]);
+		u8 ds_tile[8][8] = {{0}};
 		
+		//convert the tile from gameboy format to ds format
+		convert_tile_gb_to_nds(gb_tile, (u8 *)ds_tile);
 		
+		//now the tile is in ds_tile, write that into memory
+		DC_FlushRange(ds_tile, 64);
+		dmaCopy(ds_tile, &(gfx[counter * 64]), 64);
+		
+	}
+	
+
+	
 	//copy contents of OAM
-	int nds_oam_index = 0;
-	for (counter = 0; counter < 40; ++counter) //40 is the number of max sprites in GB
+	for (counter = 0; counter < NUM_SPRITES && is_set(info->sprites_modified, counter); ++counter) //40 is the number of max sprites in GB
 	{
 		/*
 			Layout of OAM in GB:
@@ -225,13 +263,31 @@ int gfx_draw(gfx_canvas_info * info)
 			  Bit2-0 Palette number  **CGB Mode Only**     (OBP0-7) => not used in GB
 		*/
 		u32 attribute = info->oam[counter];
-		u8 x_pos = attribute | 0xff;
-		u8 y_pos = attribute | (0xff<<8);
-		u8 tile_index = attribute | (0xff<<16);
-		u8 priority = attribute | (0x80<<24);
-		u8 y_flip = attribute | (0x40<<24);
-		u8 x_flip = attribute | (0x20<<24);
+		u8 y_pos = attribute & 0xff;
+		u8 x_pos = (attribute>>8) & 0xff;
+		u8 tile_index = (attribute>>16) & 0xff;
+		u8 priority = (attribute>>24) & 0x80;
+		u8 y_flip = (attribute>>24) & 0x40;
+		u8 x_flip = (attribute>>24) & 0x20;
+			
 		
+		oamSet(&oamMain, //main graphics engine context
+			counter,           //oam index (0 to 127)  
+			x_pos, y_pos,   //x and y pixle location of the sprite
+			priority,                    //priority, lower renders last (on top)
+			0,					  //this is the palette index if multiple palettes or the alpha value if bmp sprite	
+			info->sprite_mode ? SpriteSize_8x16 : SpriteSize_8x8,     
+			SpriteColorFormat_256Color, 
+			gfx + tile_index * 64,                  //pointer to the loaded graphics
+			-1,                  //sprite rotation data  
+			false,               //double the size when rotating?
+			(y_pos > 160 && x_pos > 168) ? true : false,			//hide the sprite?
+			y_flip ? true : false, x_flip ? true : false, //vflip, hflip
+			false	//apply mosaic
+			);
+		
+		/*
+		SHIT COMMENTED OUT BECAUSE DUE DATE IS NEAR AND SHIT ISN'T WORKING, so using library routines instead
 		u16 * oam = (u16 *)&(OAM[nds_oam_index]);	//TODO: investigate this later:
 													//1. When using the 256 Colors/1 Palette mode, 
 													//only each second tile may be used, the lower 
@@ -281,8 +337,10 @@ int gfx_draw(gfx_canvas_info * info)
 			*obj_attribute_2 |= (3<<10);	//3 is low priority
 		else
 			*obj_attribute_2 &= ~(3<<10);	//0 is high priority
+			*/
 			
 	}
+	oamUpdate(&oamMain);
 	
 	
 	return 0;
