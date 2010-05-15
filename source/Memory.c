@@ -21,7 +21,8 @@ void write8(u16 address, u8 value)
 	//Cartridge address space, so forward the write
 	if(address < 0x8000)
 	{
-		cartridgeWrite(address, value);
+		//TODO no longer supporting this
+		//ctg_write(address, value);
 	}
 }
 
