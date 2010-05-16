@@ -385,6 +385,7 @@ void gfx_init()
 */
 int gfx_setup(gfx_canvas_info * info)
 {
+	int counter;
 	if (!info)
 		return -1;
 	
@@ -397,7 +398,8 @@ int gfx_setup(gfx_canvas_info * info)
 	info->tile_map = (info->tile_map_type) ? &RAM[0x9c00] : &RAM[0x9800];
 	info->tile_data_type = (lcdc & 16) ? 0 : 1;
 	info->tile_data_table = (u16 *)((info->tile_data_type) ? &RAM[0x8800] : &RAM[0x8000]);
-
+	for (counter = 0; counter < NUM_TILES/8; ++counter)
+		info->tiles_modified = ~0;
 	
 	info->window_x = RAM[0xff4b];
 	info->window_y = RAM[0xff4a];
@@ -408,6 +410,8 @@ int gfx_setup(gfx_canvas_info * info)
 	info->oam = (u32 *)&RAM[0xfe00];
 	info->sprite_mode = (lcdc & 4) ? 1 : 0;
 	info->sprite_pattern_table = &RAM[0x8000];
+	for (counter = 0; counter < NUM_SPRITES/8; ++counter)
+		info->sprites_modified = ~0;
 	
 	return 0;
 }
