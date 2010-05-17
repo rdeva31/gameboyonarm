@@ -108,4 +108,5 @@ typedef struct {
 //function prototypes... see Graphics.c for documentation
 int gfx_draw(gfx_canvas_info *);
 void gfx_init();
+int gfx_setup(gfx_canvas_info * info);
 #endif
