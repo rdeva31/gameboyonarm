@@ -4,7 +4,6 @@
 
 	.extern RAM
 
-
 @@@@@@@@@@@@@
 	.text
 	.align 2
@@ -18,16 +17,6 @@
 .macro SET_A r
 	bic r0, r0, r11, lsl #8
 	orr r0, r0, \r, lsl #8
-.endm
-
-.macro SET_B r
-	bic r0, r0, r11, lsl #24
-	orr r0, r0, \r, lsl #24
-.endm
-
-.macro SET_C r
-	bic r0, r0, r11, lsl #16
-	orr r0, r0, \r, lsl #16
 .endm
 
 .macro SET_F r
@@ -71,11 +60,11 @@
 	tst r0, #0x80
 .endm
 
-.macro CHECK_FLAG_H
+.macro CHECK_FLAG_N
 	tst r0, #0x40
 .endm
 
-.macro CHECK_FLAG_N
+.macro CHECK_FLAG_H
 	tst r0, #0x20
 .endm
 
@@ -110,6 +99,16 @@
 	tst \r, \m
 	orreq r0, r0, #0x10
 	bicne r0, r0, #0x10
+.endm
+
+.macro SET_B r
+	bic r0, r0, r11, lsl #24
+	orr r0, r0, \r, lsl #24
+.endm
+
+.macro SET_C r
+	bic r0, r0, r11, lsl #16
+	orr r0, r0, \r, lsl #16
 .endm
 
 .macro SET_D r
@@ -162,11 +161,11 @@
 
 .macro READ_A r
 	mov \r, r0, lsr #8
-	and \r, \r, #0xFF
+	and \r, \r, r11
 .endm
 
 .macro READ_F r
-	and \r, r0, #0xFF
+	and \r, r0, r11
 .endm
 
 .macro READ_B r
@@ -175,7 +174,7 @@
 
 .macro READ_C r
 	mov \r, r0, lsr #16
-	and \r, \r, #0xFF
+	and \r, \r, r11
 .endm
 
 .macro READ_D r
@@ -184,16 +183,16 @@
 
 .macro READ_E r
 	mov \r, r1, lsr #16
-	and \r, \r, #0xFF
+	and \r, \r, r11
 .endm
 
 .macro READ_H r
 	mov \r, r1, lsr #8
-	and \r, \r, #0xFF
+	and \r, \r, r11
 .endm
 
 .macro READ_L r
-	and \r, r1, #0xFF
+	and \r, r1, r11
 .endm
 
 .macro READ_AF r
@@ -287,7 +286,7 @@
 	UPDATE_FLAG_H r8, #0x1000
 	add \d, \d, \r
 	UPDATE_FLAG_C \d, #0x10000
-	ands \d, \d, r11
+	and \d, \d, r12
 .endm
 
 .macro SUB8 d, r
@@ -344,7 +343,6 @@
 	add r8, r8, #1
 	UPDATE_FLAG_H r8, #0x10
 	add \r, \r, #1
-	UPDATE_FLAG_C \r, #0x100
 	ands \r, \r, r11
 	UPDATE_FLAG_Z
 .endm
@@ -352,7 +350,8 @@
 .macro DEC8 r
 	SET_FLAG_N
 	and r8, \r, #0xF
-	UPDATE_FLAG_H_NEG r8, #0xF
+	sub r8, r8, #1
+	UPDATE_FLAG_H_NEG r8, #0x10
 	sub \r, \r, #1
 	ands \r, \r, r11
 	UPDATE_FLAG_Z
@@ -465,6 +464,7 @@
 @ r3  = PC State Register
 @ r4  = Frame Cycle Count
 @ r5  = RAM Address
+@ r10 = ProcessorState Address
 @ r11 = Byte mask (0xFF)
 @ r12 = Word mask (0xFFFF)
 @-------------------------------------------------------------------------------
@@ -473,17 +473,22 @@ executeFrame:
 
 	push {r4,r5,r6,r7,r8,r9,r10,r11,r12,lr}		@ Saving registers for calling function
 
-	ldr r7, =ProcessorState
-	ldr r0, [r7]					@ Loading A,B,C,F
-	ldr r1, [r7, #4]				@ Loading D,E,H,L
-	ldr r2, [r7, #8]				@ Loading SP
-	ldr r3, [r7, #12]				@ Loading PC
-	ldr r4, [r7, #16]				@ Loading frame cycle count
+	ldr r10, =ProcessorState		@ Initializing r10 to the ProcessorState address
+
+	ldr r0, [r10]					@ Loading A,B,C,F
+	ldr r1, [r10, #4]				@ Loading D,E,H,L
+	ldr r2, [r10, #8]				@ Loading SP
+	ldr r3, [r10, #12]				@ Loading PC
+	ldr r4, [r10, #16]				@ Loading frame cycle count
 
 	ldr r5, =RAM					@ Initializing r5 to the RAM address
 
 	mov r11, #0xFF					@ Initializing r11 to 0xFF used for byte masking
 	orr r12, r11, r11, lsl #8		@ Initializing r12 to 0xFFFF used for word masking
+
+	ldr r6, =RequestedVBlank
+	mov r7, #0
+	streq r7, [r6]					@ Storing that VBlank was not requested this frame
 
 .next:
 
@@ -491,25 +496,99 @@ executeFrame:
 	add r3, r3, #1					@ Incrementing PC by 1
 
 	ldr r7, =OpcodeJT				@ Loading opcode jump table address
-	ldr r7, [r7, r6]				@ Loading opcode handler function address
+	ldr r7, [r7, r6, lsl #2]		@ Loading opcode handler function address
 
 	adr lr, .opReturn				@ Loading link register with the return address
 	bx r7							@ Branching to the opcode handler function
 
 .opReturn:
 
-	ldr r7, =17555
-	subs r6, r4, r7					@ Calculating leftover cycle count
-	blo .next						@  and continue to next instruction if < max
+	mov r8, #0						@ Initializing the new request flags to 0
+
+	ldr r6, [r10, #24]				@ Loading div timer cycle count
+	add r6, r6, #4
+	ands r6, r6, r11
+	str r6, [r10, #24]				@ Storing the div timer cycle count
+	bne .handleTimer				@ Skipping over incrementing div timer if not needed yet
+
+	ldr r6, =0xFF04
+	ldr r7, [r5, r6]
+	add r7, r7, #1
+	and r7, r7, r11
+	str r7, [r5, r6]				@ Updating the DIV timer by incrementing it
+
+.handleTimer:
+
+	ldr r6, =0xFF07
+	ldrb r6, [r5, r6]
+	tst r6, #0x04
+	beq .handleGraphics				@ Skipping over timer handling if it is stopped
+
+.handleGraphics:
+
+	ldr r6, =16416
+	cmp r4, r6
+	blt .handleInterrupts			@ Skipping possible VBlank request if not time yet
+
+	ldr r6, =RequestedVBlank
+	ldr r7, [r6]
+	cmp	r7, #0
+	orreq r8, r8, #0x01				@ Adding VBlank to the new request flags
+	moveq r7, #1
+	streq r7, [r6]					@ Storing that VBlank was requested this frame
+
+.handleInterrupts:
+
+	ldr r9, =0xFF0F
+	ldrb r7, [r5, r9]				@ Loading the current interrupt request flags
+
+	orr r7, r7, r8					
+	strb r7, [r5, r9]				@ Updating it with the new request flags
+
+	ldr r6, [r10, #20]				
+	orrs r6, r6, #0
+	beq .checkDone					@ IME flag not set, SKIPPING
+
+	ldrb r6, [r5, r12]				@ Loading the interrupt enable flags
+
+	ands r6, r6, r7					@ ANDing the enable and request flags
+
+	beq .checkDone					@ No enabled interrupts were requested, SKIPPING
+
+	ldr r8, =InterruptPriority
+	ldr r8, [r8, r6, lsl #2]		@ Figuring out which interrupt has priority
+
+	bic r7, r7, r8
+	strb r7, [r5, r9]				@ Clearing the current request flag and storing it
+
+	mov r6, #0
+	str r6, [r10, #20]				@ Disabling the IME flag
+
+	READ_PC r6
+	READ_SP r7
+	sub r7, r7, #2
+	WRITE_16 r6, r7
+	SET_SP r7						@ Pushing the current PC onto the stack
+
+	ldr r6, =InterruptVector
+	ldr r6, [r6, r8, lsl #2]
+	SET_PC r6						@ Loading the interrupt vector address into the PC
+
+.checkDone:
+
+	ldr r6, =17556
+	cmp r4, r6
+	blt .next						@ Executing next instruction if not done
 
 .done:
 
-	ldr r7, =ProcessorState
-	str r0, [r7]					@ Saving A,F,B,C
-	str r1, [r7, #4]				@ Saving D,E,H,L
-	str r2, [r7, #8]				@ Saving SP
-	str r3, [r7, #12]				@ Saving PC
-	str r6, [r7, #16]				@ Saving leftover cycle count
+	sub r4, r4, r6					@ Calculating the number of leftover cycles
+
+	str r0, [r10]					@ Saving A,F,B,C
+	str r1, [r10, #4]				@ Saving D,E,H,L
+	str r2, [r10, #8]				@ Saving SP
+	str r3, [r10, #12]				@ Saving PC
+	str r4, [r10, #16]				@ Saving leftover cycle count
 
 	pop	{r4,r5,r6,r7,r8,r9,r10,r11,r12,lr}		@ Restoring registers for calling function
 
@@ -943,6 +1022,10 @@ op5D:
 	UPDATE_CYCLE_COUNT 1
 	bx lr
 
+@###############################################################################
+	.ltorg
+@###############################################################################
+
 @-------------------------------------------------------------------------------
 @ LD E, (HL)
 @-------------------------------------------------------------------------------
@@ -1174,8 +1257,8 @@ op36:
 @-------------------------------------------------------------------------------
 op0A:
 	
-	READ_BC r6
-	READ_8 r6, r6
+	READ_BC r7
+	READ_8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 2
 	bx lr
@@ -1185,8 +1268,8 @@ op0A:
 @-------------------------------------------------------------------------------
 op1A:
 	
-	READ_DE r6
-	READ_8 r6, r6
+	READ_DE r7
+	READ_8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 2
 	bx lr
@@ -1196,8 +1279,8 @@ op1A:
 @-------------------------------------------------------------------------------
 opFA:
 	
-	READ_IMM16 r6, r7
-	READ_8 r6, r6
+	READ_IMM16 r7, r8
+	READ_8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 4
 	bx lr
@@ -1221,10 +1304,6 @@ op47:
 	SET_B r6
 	UPDATE_CYCLE_COUNT 1
 	bx lr
-
-@###############################################################################
-	.ltorg
-@###############################################################################
 
 @-------------------------------------------------------------------------------
 @ LD C, A
@@ -1310,7 +1389,7 @@ op77:
 	bx lr
 
 @-------------------------------------------------------------------------------
-@ LD (HL), A
+@ LD (XXXX), A
 @-------------------------------------------------------------------------------
 opEA:
 	
@@ -1353,6 +1432,7 @@ op3A:
 	READ_8 r7, r6
 	SET_A r7
 	sub r6, r6, #1
+	and r6, r6, r12
 	SET_HL r6
 	UPDATE_CYCLE_COUNT 2
 	bx lr
@@ -1366,6 +1446,7 @@ op32:
 	READ_A r7
 	WRITE_8 r7, r6
 	sub r6, r6, #1
+	and r6, r6, r12
 	SET_HL r6
 	UPDATE_CYCLE_COUNT 2
 	bx lr
@@ -1379,6 +1460,7 @@ op2A:
 	READ_8 r7, r6
 	SET_A r7
 	add r6, r6, #1
+	and r6, r6, r12
 	SET_HL r6
 	UPDATE_CYCLE_COUNT 2
 	bx lr
@@ -1392,6 +1474,7 @@ op22:
 	READ_A r7
 	WRITE_8 r7, r6
 	add r6, r6, #1
+	and r6, r6, r12
 	SET_HL r6
 	UPDATE_CYCLE_COUNT 2
 	bx lr
@@ -1509,8 +1592,8 @@ opF5:
 	
 	READ_AF r6
 	READ_SP r7
-	WRITE_16 r6, r7
 	sub r7, r7, #2
+	WRITE_16 r6, r7
 	SET_SP r7
 	UPDATE_CYCLE_COUNT 4
 	bx lr
@@ -1522,8 +1605,8 @@ opC5:
 	
 	READ_BC r6
 	READ_SP r7
-	WRITE_16 r6, r7
 	sub r7, r7, #2
+	WRITE_16 r6, r7
 	SET_SP r7
 	UPDATE_CYCLE_COUNT 4
 	bx lr
@@ -1535,8 +1618,8 @@ opD5:
 	
 	READ_DE r6
 	READ_SP r7
-	WRITE_16 r6, r7
 	sub r7, r7, #2
+	WRITE_16 r6, r7
 	SET_SP r7
 	UPDATE_CYCLE_COUNT 4
 	bx lr
@@ -1548,8 +1631,8 @@ opE5:
 	
 	READ_HL r6
 	READ_SP r7
-	WRITE_16 r6, r7
 	sub r7, r7, #2
+	WRITE_16 r6, r7
 	SET_SP r7
 	UPDATE_CYCLE_COUNT 4
 	bx lr
@@ -1723,7 +1806,8 @@ opC6:
 op8F:
 	
 	READ_A r6
-	add r7, r6, #1
+	CHECK_FLAG_C
+	addne r7, r6, #1
 	ADD8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -1736,7 +1820,8 @@ op88:
 	
 	READ_A r6
 	READ_B r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	ADD8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -1749,7 +1834,8 @@ op89:
 	
 	READ_A r6
 	READ_C r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	ADD8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -1762,7 +1848,8 @@ op8A:
 	
 	READ_A r6
 	READ_D r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	ADD8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -1775,7 +1862,8 @@ op8B:
 	
 	READ_A r6
 	READ_E r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	ADD8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -1788,7 +1876,8 @@ op8C:
 	
 	READ_A r6
 	READ_H r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	ADD8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -1801,7 +1890,8 @@ op8D:
 	
 	READ_A r6
 	READ_L r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	ADD8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -1814,8 +1904,9 @@ op8E:
 	
 	READ_A r6
 	READ_HL r7
-	add r7, r7, #1
 	READ_8 r7, r7
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	ADD8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 2
@@ -1828,7 +1919,8 @@ opCE:
 	
 	READ_A r6
 	READ_IMM8 r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	ADD8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 2
@@ -1918,6 +2010,10 @@ op95:
 	UPDATE_CYCLE_COUNT 1
 	bx lr
 
+@###############################################################################
+	.ltorg
+@###############################################################################
+
 @-------------------------------------------------------------------------------
 @ SUB A, (HL)
 @-------------------------------------------------------------------------------
@@ -1950,7 +2046,8 @@ op9F:
 	
 	READ_A r6
 	mov r7, r6
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	SUB8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -1963,7 +2060,8 @@ op98:
 	
 	READ_A r6
 	READ_B r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	SUB8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -1976,7 +2074,8 @@ op99:
 	
 	READ_A r6
 	READ_C r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	SUB8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -1989,7 +2088,8 @@ op9A:
 	
 	READ_A r6
 	READ_D r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	SUB8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -2002,7 +2102,8 @@ op9B:
 	
 	READ_A r6
 	READ_E r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	SUB8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -2015,7 +2116,8 @@ op9C:
 	
 	READ_A r6
 	READ_H r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	SUB8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -2028,7 +2130,8 @@ op9D:
 	
 	READ_A r6
 	READ_L r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	SUB8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
@@ -2042,7 +2145,8 @@ op9E:
 	READ_A r6
 	READ_HL r7
 	READ_8 r7, r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	SUB8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 2
@@ -2055,7 +2159,8 @@ opDE:
 	
 	READ_A r6
 	READ_IMM8 r7
-	add r7, r7, #1
+	CHECK_FLAG_C
+	addne r7, r7, #1
 	SUB8 r6, r7
 	SET_A r6
 	UPDATE_CYCLE_COUNT 2
@@ -2160,10 +2265,6 @@ opE6:
 	SET_A r6
 	UPDATE_CYCLE_COUNT 2
 	bx lr
-
-@###############################################################################
-	.ltorg
-@###############################################################################
 
 @-------------------------------------------------------------------------------
 @ OR A, A
@@ -2371,8 +2472,8 @@ opEE:
 opBF:
 	SET_FLAG_Z
 	SET_FLAG_N
-	RESET_FLAG_H
-	RESET_FLAG_C
+	SET_FLAG_H
+	SET_FLAG_C
 	UPDATE_CYCLE_COUNT 1
 	bx lr
 
@@ -2785,12 +2886,73 @@ op3B:
 	bx lr
 
 @-------------------------------------------------------------------------------
+@ DAA
+@-------------------------------------------------------------------------------
+op27:
+
+	READ_A r6
+	CHECK_FLAG_N
+	bne .SUB_LOW
+
+.ADD_LOW:
+
+	CHECK_FLAG_H
+	addne r6, r6, #0x6
+	bne .ADD_HIGH
+
+	and r7, r6, #0xF
+	cmp r7, #0x9
+	addgt r6, r6, #0x6
+
+.ADD_HIGH:
+
+	CHECK_FLAG_C
+	addne r6, r6, #0x60
+	bne .DAA_DONE
+
+	and r7, r6, #0xF0
+	cmp r7, #0x90
+	addgt r6, r6, #0x60
+	b .DAA_DONE
+
+.SUB_LOW:
+
+	CHECK_FLAG_H
+	subeq r6, r6, #0x6
+	beq .SUB_HIGH
+
+	and r7, r6, #0xF
+	cmp r7, #0x9
+	subgt r6, r6, #0x6
+
+.SUB_HIGH:
+
+	CHECK_FLAG_C
+	subeq r6, r6, #0x60
+	beq .DAA_DONE
+
+	and r7, r6, #0xF0
+	cmp r7, #0x90
+	subgt r6, r6, #0x60
+
+.DAA_DONE:
+
+	RESET_FLAG_H
+	tst r6, #0x100
+	orrne r0, r0, #0x10
+	ands r6, r6, r11
+	UPDATE_FLAG_Z
+	SET_A r6
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
 @ CPL
 @-------------------------------------------------------------------------------
 op2F:
 	
 	READ_A r6
-	eor r6, r6, #0xFF
+	eor r6, r6, r11
 	SET_A r6
 	SET_FLAG_N
 	SET_FLAG_H
@@ -2841,6 +3003,10 @@ op17:
 	SET_A r6
 	UPDATE_CYCLE_COUNT 1
 	bx lr
+
+@###############################################################################
+	.ltorg
+@###############################################################################
 
 @-------------------------------------------------------------------------------
 @ RRCA
@@ -3031,10 +3197,6 @@ op38:
 	UPDATE_CYCLE_COUNT 1
 	bx lr
 
-@###############################################################################
-	.ltorg
-@###############################################################################
-
 @-------------------------------------------------------------------------------
 @ CALL XXXX
 @-------------------------------------------------------------------------------
@@ -3043,8 +3205,8 @@ opCD:
 	READ_IMM16 r6, r7
 	READ_PC r7
 	READ_SP r8
-	WRITE_16 r7, r8
 	sub r8, r8, #2
+	WRITE_16 r7, r8
 	SET_SP r8
 	SET_PC r6
 	UPDATE_CYCLE_COUNT 6
@@ -3062,8 +3224,8 @@ opC4:
 	
 	READ_PC r7
 	READ_SP r8
-	WRITE_16 r7, r8
 	sub r8, r8, #2
+	WRITE_16 r7, r8
 	SET_SP r8
 	SET_PC r6
 	UPDATE_CYCLE_COUNT 3
@@ -3081,8 +3243,8 @@ opCC:
 
 	READ_PC r7
 	READ_SP r8
-	WRITE_16 r7, r8
 	sub r8, r8, #2
+	WRITE_16 r7, r8
 	SET_SP r8
 	SET_PC r6
 	UPDATE_CYCLE_COUNT 3
@@ -3100,8 +3262,8 @@ opD4:
 	
 	READ_PC r7
 	READ_SP r8
-	WRITE_16 r7, r8
 	sub r8, r8, #2
+	WRITE_16 r7, r8
 	SET_SP r8
 	SET_PC r6
 	UPDATE_CYCLE_COUNT 3
@@ -3119,8 +3281,8 @@ opDC:
 
 	READ_PC r7
 	READ_SP r8
-	WRITE_16 r7, r8
 	sub r8, r8, #2
+	WRITE_16 r7, r8
 	SET_SP r8
 	SET_PC r6
 	UPDATE_CYCLE_COUNT 3
@@ -3133,8 +3295,8 @@ opC7:
 	
 	READ_PC r6
 	READ_SP r7
-	WRITE_16 r6, r7
 	sub r7, r7, #2
+	WRITE_16 r6, r7
 	SET_SP r7
 	SET_PC #0x00
 	UPDATE_CYCLE_COUNT 4
@@ -3147,8 +3309,8 @@ opCF:
 	
 	READ_PC r6
 	READ_SP r7
-	WRITE_16 r6, r7
 	sub r7, r7, #2
+	WRITE_16 r6, r7
 	SET_SP r7
 	SET_PC #0x08
 	UPDATE_CYCLE_COUNT 4
@@ -3161,8 +3323,8 @@ opD7:
 	
 	READ_PC r6
 	READ_SP r7
-	WRITE_16 r6, r7
 	sub r7, r7, #2
+	WRITE_16 r6, r7
 	SET_SP r7
 	SET_PC #0x10
 	UPDATE_CYCLE_COUNT 4
@@ -3175,8 +3337,8 @@ opDF:
 	
 	READ_PC r6
 	READ_SP r7
-	WRITE_16 r6, r7
 	sub r7, r7, #2
+	WRITE_16 r6, r7
 	SET_SP r7
 	SET_PC #0x18
 	UPDATE_CYCLE_COUNT 4
@@ -3189,8 +3351,8 @@ opE7:
 	
 	READ_PC r6
 	READ_SP r7
-	WRITE_16 r6, r7
 	sub r7, r7, #2
+	WRITE_16 r6, r7
 	SET_SP r7
 	SET_PC #0x20
 	UPDATE_CYCLE_COUNT 4
@@ -3203,8 +3365,8 @@ opEF:
 	
 	READ_PC r6
 	READ_SP r7
-	WRITE_16 r6, r7
 	sub r7, r7, #2
+	WRITE_16 r6, r7
 	SET_SP r7
 	SET_PC #0x28
 	UPDATE_CYCLE_COUNT 4
@@ -3217,8 +3379,8 @@ opF7:
 	
 	READ_PC r6
 	READ_SP r7
-	WRITE_16 r6, r7
 	sub r7, r7, #2
+	WRITE_16 r6, r7
 	SET_SP r7
 	SET_PC #0x30
 	UPDATE_CYCLE_COUNT 4
@@ -3231,8 +3393,8 @@ opFF:
 	
 	READ_PC r6
 	READ_SP r7
-	WRITE_16 r6, r7
 	sub r7, r7, #2
+	WRITE_16 r6, r7
 	SET_SP r7
 	SET_PC #0x38
 	UPDATE_CYCLE_COUNT 4
@@ -3244,8 +3406,8 @@ opFF:
 opC9:
 	
 	READ_SP r6
-	add r6, r6, #2
 	READ_16 r7, r6, r8
+	add r6, r6, #2
 	SET_PC r7
 	SET_SP r6
 	UPDATE_CYCLE_COUNT 4
@@ -3261,8 +3423,8 @@ opC0:
 	bxeq lr
 	
 	READ_SP r6
-	add r6, r6, #2
 	READ_16 r7, r6, r8
+	add r6, r6, #2
 	SET_PC r7
 	SET_SP r6
 	UPDATE_CYCLE_COUNT 3
@@ -3278,8 +3440,8 @@ opC8:
 	bxne lr
 	
 	READ_SP r6
-	add r6, r6, #2
 	READ_16 r7, r6, r8
+	add r6, r6, #2
 	SET_PC r7
 	SET_SP r6
 	UPDATE_CYCLE_COUNT 3
@@ -3295,8 +3457,8 @@ opD0:
 	bxeq lr
 	
 	READ_SP r6
-	add r6, r6, #2
 	READ_16 r7, r6, r8
+	add r6, r6, #2
 	SET_PC r7
 	SET_SP r6
 	UPDATE_CYCLE_COUNT 3
@@ -3312,12 +3474,53 @@ opD8:
 	bxne lr
 	
 	READ_SP r6
-	add r6, r6, #2
 	READ_16 r7, r6, r8
+	add r6, r6, #2
 	SET_PC r7
 	SET_SP r6
 	UPDATE_CYCLE_COUNT 3
 	bx lr
+
+@-------------------------------------------------------------------------------
+@ DI
+@-------------------------------------------------------------------------------
+opF3:
+
+	ldr r7, =ProcessorState
+	mov r6, #0
+	str r6, [r7, #20]
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ EI
+@-------------------------------------------------------------------------------
+opFB:
+
+	ldr r7, =ProcessorState
+	mov r6, #1
+	str r6, [r7, #20]
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ RETI
+@-------------------------------------------------------------------------------
+opD9:
+
+	READ_SP r6
+	READ_16 r7, r6, r8
+	add r6, r6, #2
+	SET_PC r7
+	SET_SP r6
+
+	ldr r7, =ProcessorState
+	mov r6, #1
+	str r6, [r7, #20]
+
+	UPDATE_CYCLE_COUNT 2
+	bx lr
+	
 
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @ CB Instruction
@@ -3800,6 +4003,10 @@ opCB20:
 	UPDATE_CYCLE_COUNT 2
 	bx lr
 
+@###############################################################################
+	.ltorg
+@###############################################################################
+
 @-------------------------------------------------------------------------------
 @ SLA C
 @-------------------------------------------------------------------------------
@@ -4044,10 +4251,6 @@ opCB3E:
 	WRITE_8 r7, r6
 	UPDATE_CYCLE_COUNT 4
 	bx lr
-
-@###############################################################################
-	.ltorg
-@###############################################################################
 
 @-------------------------------------------------------------------------------
 @ BIT 0, A
@@ -4808,6 +5011,10 @@ opCB88:
 	UPDATE_CYCLE_COUNT 2
 	bx lr
 
+@###############################################################################
+	.ltorg
+@###############################################################################
+
 @-------------------------------------------------------------------------------
 @ RES 1, C
 @-------------------------------------------------------------------------------
@@ -5052,10 +5259,6 @@ opCB9E:
 	WRITE_8 r7, r6
 	UPDATE_CYCLE_COUNT 4
 	bx lr
-
-@###############################################################################
-	.ltorg
-@###############################################################################
 
 @-------------------------------------------------------------------------------
 @ RES 4, A
@@ -5802,6 +6005,10 @@ opCBE1:
 	UPDATE_CYCLE_COUNT 2
 	bx lr
 
+@###############################################################################
+	.ltorg
+@###############################################################################
+
 @-------------------------------------------------------------------------------
 @ SET 4, D
 @-------------------------------------------------------------------------------
@@ -6036,10 +6243,6 @@ opCBF6:
 	UPDATE_CYCLE_COUNT 4
 	bx lr
 
-@###############################################################################
-	.ltorg
-@###############################################################################
-
 @-------------------------------------------------------------------------------
 @ SET 7, A
 @-------------------------------------------------------------------------------
@@ -6140,11 +6343,27 @@ opCBFE:
 ProcessorState:
 	.global ProcessorState
 
-    .word 0x00000000	@ A,B,C,F
-    .word 0x00000000	@ D,E,H,L
+    .word 0x001301B0	@ B,C,A,F
+    .word 0x00D8014D	@ D,E,H,L
     .word 0x0000FFFE	@ SP
     .word 0x00000100	@ PC (initially set to 0x100)
     .word 0x00000000	@ Frame cycle count (overflow from last frame)
+	.word 0x00000000	@ IME Flag
+	.word 0x00000000	@ DIV timer cycle count
+	.word 0x00000000	@ Timer cycle count
+
+RequestedVBlank:
+	.word 0
+
+@-------------------------------------------------------------------------------
+@ Interrupts
+@-------------------------------------------------------------------------------
+InterruptPriority:
+	.word 0x00, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01
+	.word 0x10, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01, 0x08, 0x01, 0x02, 0x01, 0x04, 0x01, 0x02, 0x01
+
+InterruptVector:
+	.word 0x00, 0x40, 0x48, 0x00, 0x50, 0x00, 0x00, 0x00, 0x58, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x60
 
 @-------------------------------------------------------------------------------
 @ Opcode Function Jump Table
@@ -6153,7 +6372,7 @@ OpcodeJT:
 
     .word op00, op01, op02, op03, op04, op05, op06, op07, op08, op09, op0A, op0B, op0C, op0D, op0E, op0F
     .word op__, op11, op12, op13, op14, op15, op16, op17, op18, op19, op1A, op1B, op1C, op1D, op1E, op1F
-    .word op20, op21, op22, op23, op24, op25, op26, op__, op28, op29, op2A, op2B, op2C, op2D, op2E, op2F
+    .word op20, op21, op22, op23, op24, op25, op26, op27, op28, op29, op2A, op2B, op2C, op2D, op2E, op2F
     .word op30, op31, op32, op33, op34, op35, op36, op37, op38, op39, op3A, op3B, op3C, op3D, op3E, op3F
     .word op40, op41, op42, op43, op44, op45, op46, op47, op48, op49, op4A, op4B, op4C, op4D, op4E, op4F
     .word op50, op51, op52, op53, op54, op55, op56, op57, op58, op59, op5A, op5B, op5C, op5D, op5E, op5F
@@ -6164,17 +6383,13 @@ OpcodeJT:
     .word opA0, opA1, opA2, opA3, opA4, opA5, opA6, opA7, opA8, opA9, opAA, opAB, opAC, opAD, opAE, opAF
     .word opB0, opB1, opB2, opB3, opB4, opB5, opB6, opB7, opB8, opB9, opBA, opBB, opBC, opBD, opBE, opBF
     .word opC0, opC1, opC2, opC3, opC4, opC5, opC6, opC7, opC8, opC9, opCA, opCB, opCC, opCD, opCE, opCF
-    .word opD0, opD1, opD2, opXX, opD4, opD5, opD6, opD7, opD8, op__, opDA, opXX, opDC, opXX, opDE, opDF
+    .word opD0, opD1, opD2, opXX, opD4, opD5, opD6, opD7, opD8, opD9, opDA, opXX, opDC, opXX, opDE, opDF
     .word opE0, opE1, opE2, opXX, opXX, opE5, opE6, opE7, opE8, opE9, opEA, opXX, opXX, opXX, opEE, opEF
-    .word opF0, opF1, opF2, op__, opXX, opF5, opF6, opF7, opF8, opF9, opFA, op__, opXX, opXX, opFE, opFF
+    .word opF0, opF1, opF2, opF3, opXX, opF5, opF6, opF7, opF8, opF9, opFA, opFB, opXX, opXX, opFE, opFF
 
 	@ TODO
 	@	op10: STOP
-	@	op27: DAA
 	@	op76: HALT
-	@	opD9: RETI
-	@	opF3: DI
-	@	opFB: EI
 
 @-------------------------------------------------------------------------------
 @ CB Opcode Function Jump Table
