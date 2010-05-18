@@ -555,6 +555,9 @@ executeFrame:
 
 	beq .checkDone					@ No enabled interrupts were requested, SKIPPING
 
+	mov r8, #0
+	str r8, [r10, #32]				@ Resetting the processor to not be halted
+
 	ldr r8, =InterruptPriority
 	ldr r8, [r8, r6, lsl #2]		@ Figuring out which interrupt has priority
 
@@ -3520,6 +3523,28 @@ opD9:
 
 	UPDATE_CYCLE_COUNT 2
 	bx lr
+
+@-------------------------------------------------------------------------------
+@ STOP
+@-------------------------------------------------------------------------------
+op10:
+
+	mov r6, #2
+	str r6, [r10, #32]
+
+	UPDATE_CYCLE_COUNT 1
+	bx lr
+
+@-------------------------------------------------------------------------------
+@ HALT
+@-------------------------------------------------------------------------------
+op76:
+
+	mov r6, #1
+	str r6, [r10, #32]
+
+	UPDATE_CYCLE_COUNT 1
+	bx lr
 	
 
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
@@ -6351,6 +6376,7 @@ ProcessorState:
 	.word 0x00000000	@ IME Flag
 	.word 0x00000000	@ DIV timer cycle count
 	.word 0x00000000	@ Timer cycle count
+	.word 0x00000000	@ Processor stopped flag
 
 RequestedVBlank:
 	.word 0
@@ -6371,13 +6397,13 @@ InterruptVector:
 OpcodeJT:
 
     .word op00, op01, op02, op03, op04, op05, op06, op07, op08, op09, op0A, op0B, op0C, op0D, op0E, op0F
-    .word op__, op11, op12, op13, op14, op15, op16, op17, op18, op19, op1A, op1B, op1C, op1D, op1E, op1F
+    .word op10, op11, op12, op13, op14, op15, op16, op17, op18, op19, op1A, op1B, op1C, op1D, op1E, op1F
     .word op20, op21, op22, op23, op24, op25, op26, op27, op28, op29, op2A, op2B, op2C, op2D, op2E, op2F
     .word op30, op31, op32, op33, op34, op35, op36, op37, op38, op39, op3A, op3B, op3C, op3D, op3E, op3F
     .word op40, op41, op42, op43, op44, op45, op46, op47, op48, op49, op4A, op4B, op4C, op4D, op4E, op4F
     .word op50, op51, op52, op53, op54, op55, op56, op57, op58, op59, op5A, op5B, op5C, op5D, op5E, op5F
     .word op60, op61, op62, op63, op64, op65, op66, op67, op68, op69, op6A, op6B, op6C, op6D, op6E, op6F
-    .word op70, op71, op72, op73, op74, op75, op__, op77, op78, op79, op7A, op7B, op7C, op7D, op7E, op7F
+    .word op70, op71, op72, op73, op74, op75, op76, op77, op78, op79, op7A, op7B, op7C, op7D, op7E, op7F
     .word op80, op81, op82, op86, op84, op85, op86, op87, op88, op89, op8A, op8B, op8C, op8D, op8E, op8F
     .word op90, op91, op92, op93, op94, op95, op96, op97, op98, op99, op9A, op9B, op9C, op9D, op9E, op9F
     .word opA0, opA1, opA2, opA3, opA4, opA5, opA6, opA7, opA8, opA9, opAA, opAB, opAC, opAD, opAE, opAF
@@ -6386,10 +6412,6 @@ OpcodeJT:
     .word opD0, opD1, opD2, opXX, opD4, opD5, opD6, opD7, opD8, opD9, opDA, opXX, opDC, opXX, opDE, opDF
     .word opE0, opE1, opE2, opXX, opXX, opE5, opE6, opE7, opE8, opE9, opEA, opXX, opXX, opXX, opEE, opEF
     .word opF0, opF1, opF2, opF3, opXX, opF5, opF6, opF7, opF8, opF9, opFA, opFB, opXX, opXX, opFE, opFF
-
-	@ TODO
-	@	op10: STOP
-	@	op76: HALT
 
 @-------------------------------------------------------------------------------
 @ CB Opcode Function Jump Table
