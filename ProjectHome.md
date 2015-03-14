@@ -1,0 +1,1 @@
+Simulates the Nintendo [GameBoy](http://en.wikipedia.org/wiki/Game_Boy) hand-held on an ARM system. So, like, you don't have to pay Nintendo or anything. You could just use this stuff.
